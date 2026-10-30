@@ -21,7 +21,7 @@ A RuneLite plugin for Group Ironman players that stops you from logging out whil
       
       <img width="286" height="128" alt="image" src="https://github.com/user-attachments/assets/eb6c94ca-cb2e-46ae-8df2-87cd736de7db" />
 
-- **Never in the way when it matters.** The plugin does nothing in the Wilderness, on PvP worlds (configurable) or on non-GIM accounts. Clicks outside the box still reach the game, so you can eat, move and fight while it is open.
+- **Exceptions** The plugin does nothing in the Wilderness, on PvP worlds (configurable) or on non-GIM accounts. Clicks outside the box still reach the game, so you can eat, move and fight while it is open.
 
   <img width="231" height="154" alt="image" src="https://github.com/user-attachments/assets/041c2d8b-8e55-444c-a853-9018f8b163d0" />
 
