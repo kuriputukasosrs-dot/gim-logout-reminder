@@ -18,6 +18,7 @@ A RuneLite plugin for Group Ironman players that stops you from logging out whil
   - Something left: a box shows the items as icons (hover for name and location).
     - **Logout anyway** lets your next Logout click through.
     - **Cancel** opens the list panel so you can go deposit them.
+      
       <img width="286" height="128" alt="image" src="https://github.com/user-attachments/assets/eb6c94ca-cb2e-46ae-8df2-87cd736de7db" />
 
 - **Never in the way when it matters.** The plugin does nothing in the Wilderness, on PvP worlds (configurable) or on non-GIM accounts. Clicks outside the box still reach the game, so you can eat, move and fight while it is open.
