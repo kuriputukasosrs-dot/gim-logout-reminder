@@ -8,6 +8,9 @@ A RuneLite plugin for Group Ironman players that stops you from logging out whil
   <img width="198" height="170" alt="image" src="https://github.com/user-attachments/assets/038d1257-0973-4616-a921-d97ffea98b99" />
   <img width="216" height="169" alt="image" src="https://github.com/user-attachments/assets/759b9258-5a91-4d68-aa77-1ff2152085fd" />
 - **Sidebar panel.** The chest icon on the right opens the list. Remove items with the **X** button.
+  <img width="28" height="22" alt="image" src="https://github.com/user-attachments/assets/ef0c68ad-bcb9-4af1-9667-ef05e1d1783f" />
+  <img width="240" height="152" alt="image" src="https://github.com/user-attachments/assets/b53539e6-f6d2-48e3-a722-9e9e1444b859" />
+
 - **Filtered bank.** While the panel is open, your bank only shows the items on the list (uses the Bank Tags tag `gim`).
 - **Logout check.** When you click *Click here to logout* (or the world switcher's Logout button), the plugin checks your inventory, equipment and bank:
   - Nothing from the list on you: you log out normally, no questions asked.
