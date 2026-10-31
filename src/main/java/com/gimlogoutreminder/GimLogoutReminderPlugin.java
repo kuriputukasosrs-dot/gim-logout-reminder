@@ -73,9 +73,9 @@ import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 
 @PluginDescriptor(
-	name = "GIM Logout Reminder",
-	description = "Asks whether you put your items in group storage before logging out, and keeps a list of items to deposit",
-	tags = {"group", "ironman", "gim", "storage", "logout", "reminder", "bank"}
+		name = "GIM Logout Reminder",
+		description = "Asks whether you put your items in group storage before logging out, and keeps a list of items to deposit",
+		tags = {"group", "ironman", "gim", "storage", "logout", "reminder", "bank"}
 )
 @PluginDependency(BankTagsPlugin.class)
 public class GimLogoutReminderPlugin extends Plugin
@@ -173,11 +173,11 @@ public class GimLogoutReminderPlugin extends Plugin
 		panel = new GimListPanel(this, itemManager);
 		BufferedImage icon = ImageUtil.loadImageResource(getClass(), "panel_icon.png");
 		navButton = NavigationButton.builder()
-			.tooltip("GIM storage list")
-			.icon(icon)
-			.priority(10)
-			.panel(panel)
-			.build();
+				.tooltip("GIM storage list")
+				.icon(icon)
+				.priority(10)
+				.panel(panel)
+				.build();
 		clientToolbar.addNavigation(navButton);
 
 		overlayManager.add(dialogOverlay);
@@ -403,8 +403,8 @@ public class GimLogoutReminderPlugin extends Plugin
 		Map<Integer, Long> bank = new LinkedHashMap<>();
 		addListedItems(bankContainer, bank);
 		String value = bank.entrySet().stream()
-			.map(e -> e.getKey() + ":" + e.getValue())
-			.collect(Collectors.joining(","));
+				.map(e -> e.getKey() + ":" + e.getValue())
+				.collect(Collectors.joining(","));
 		configManager.setRSProfileConfiguration(CONFIG_GROUP, BANK_KEY, value);
 	}
 
@@ -477,10 +477,51 @@ public class GimLogoutReminderPlugin extends Plugin
 		boolean listed = listedItems.contains(canonical);
 
 		client.createMenuEntry(-1)
-			.setOption(listed ? REMOVE_OPTION : ADD_OPTION)
-			.setTarget(event.getTarget())
-			.setType(MenuAction.RUNELITE)
-			.onClick(e -> toggleItem(canonical));
+				.setOption(listed ? REMOVE_OPTION : ADD_OPTION)
+				.setTarget(event.getTarget())
+				.setType(MenuAction.RUNELITE)
+				.onClick(e -> toggleItem(canonical));
+	}
+
+	/** Maximum number of search results shown in the panel. */
+	private static final int MAX_SEARCH_RESULTS = 25;
+
+	/** Called from the panel's search field (Swing thread). */
+	void searchItems(String query)
+	{
+		clientThread.invokeLater(() ->
+		{
+			String lower = query.toLowerCase();
+			List<GimListPanel.Entry> results = itemManager.search(query).stream()
+					// Names starting with the query first, then alphabetical
+					.sorted((a, b) ->
+					{
+						boolean aStarts = a.getName().toLowerCase().startsWith(lower);
+						boolean bStarts = b.getName().toLowerCase().startsWith(lower);
+						if (aStarts != bStarts)
+						{
+							return aStarts ? -1 : 1;
+						}
+						return a.getName().compareToIgnoreCase(b.getName());
+					})
+					.limit(MAX_SEARCH_RESULTS)
+					.map(item -> new GimListPanel.Entry(item.getId(), item.getName(), listedItems.contains(item.getId())))
+					.collect(Collectors.toList());
+			SwingUtilities.invokeLater(() -> panel.showResults(results, query));
+		});
+	}
+
+	/** Called from the panel's add button in the search results (Swing thread). */
+	void addItemFromPanel(int itemId)
+	{
+		clientThread.invokeLater(() ->
+		{
+			int canonical = itemManager.canonicalize(itemId);
+			if (!listedItems.contains(canonical))
+			{
+				toggleItem(canonical);
+			}
+		});
 	}
 
 	/** Called from the panel's remove button (Swing thread). */
@@ -558,7 +599,12 @@ public class GimLogoutReminderPlugin extends Plugin
 		{
 			entries.add(new GimListPanel.Entry(id, itemManager.getItemComposition(id).getName()));
 		}
-		SwingUtilities.invokeLater(() -> panel.update(entries));
+		SwingUtilities.invokeLater(() ->
+		{
+			panel.update(entries);
+			// Update the check marks in the search results
+			panel.refreshSearch();
+		});
 	}
 
 	// ---------------------------------------------------------------------
