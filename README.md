@@ -6,6 +6,7 @@ A RuneLite plugin for Group Ironman players that stops you from logging out whil
 
 - **Group storage list.** Search for items in the side panel (type at least 3 letters), or with the bank open right-click an item (in the bank or your inventory) and choose **Add to GIM list**.
   
+  <img width="236" height="206" alt="image" src="https://github.com/user-attachments/assets/9ca08565-7745-4c94-b1f0-5d3588d5e54d" />
   <img width="198" height="170" alt="image" src="https://github.com/user-attachments/assets/038d1257-0973-4616-a921-d97ffea98b99" />
   <img width="216" height="169" alt="image" src="https://github.com/user-attachments/assets/759b9258-5a91-4d68-aa77-1ff2152085fd" />
 - **Sidebar panel.** The chest icon on the right opens the list. Remove items with the **X** button.
