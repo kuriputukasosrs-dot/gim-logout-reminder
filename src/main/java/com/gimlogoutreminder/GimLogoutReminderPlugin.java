@@ -185,12 +185,14 @@ public class GimLogoutReminderPlugin extends Plugin
 
 		clientThread.invokeLater(() ->
 		{
+			// Reading the saved list only needs the config, so this is safe right away
 			loadItems();
 			// Make sure the bank tag matches the saved list
 			for (int id : listedItems)
 			{
 				tagManager.addTag(id, BANK_TAG, false);
 			}
+			// The list itself is only shown once logged in (see refreshPanel)
 			refreshPanel();
 		});
 	}
@@ -242,10 +244,18 @@ public class GimLogoutReminderPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
-		if (event.getGameState() != GameState.LOGGED_IN)
+		if (event.getGameState() == GameState.LOGGED_IN)
+		{
+			refreshPanel();
+		}
+		else
 		{
 			dialogOpen = false;
 			unlockedUntil = 0;
+			if (event.getGameState() == GameState.LOGIN_SCREEN)
+			{
+				refreshPanel();
+			}
 		}
 	}
 
@@ -594,6 +604,14 @@ public class GimLogoutReminderPlugin extends Plugin
 	/** Client thread only: item names must be looked up there. */
 	private void refreshPanel()
 	{
+		if (client.getGameState() != GameState.LOGGED_IN)
+		{
+			// Item names need the game data, which is only guaranteed after logging in.
+			// Showing "empty" here would wrongly suggest the list was lost.
+			SwingUtilities.invokeLater(() -> panel.showLoggedOut());
+			return;
+		}
+
 		List<GimListPanel.Entry> entries = new ArrayList<>();
 		for (int id : listedItems)
 		{

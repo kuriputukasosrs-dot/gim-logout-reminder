@@ -235,6 +235,15 @@ class GimListPanel extends PluginPanel
 		listContainer.repaint();
 	}
 
+	/** Shown before logging in, when item names can't be looked up yet. Swing thread. */
+	void showLoggedOut()
+	{
+		listContainer.removeAll();
+		listContainer.add(grayLabel("Log in to see your list."));
+		listContainer.revalidate();
+		listContainer.repaint();
+	}
+
 	private static JLabel grayLabel(String text)
 	{
 		JLabel label = new JLabel(text);
