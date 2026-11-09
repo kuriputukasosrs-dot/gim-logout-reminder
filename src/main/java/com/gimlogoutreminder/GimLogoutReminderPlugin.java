@@ -28,6 +28,8 @@ import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.LinkedHashSet;
@@ -59,6 +61,7 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.ItemVariationMapping;
 import net.runelite.client.input.MouseManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
@@ -188,10 +191,7 @@ public class GimLogoutReminderPlugin extends Plugin
 			// Reading the saved list only needs the config, so this is safe right away
 			loadItems();
 			// Make sure the bank tag matches the saved list
-			for (int id : listedItems)
-			{
-				tagManager.addTag(id, BANK_TAG, false);
-			}
+			syncBankTag(client.getItemContainer(InventoryID.BANK));
 			// The list itself is only shown once logged in (see refreshPanel)
 			refreshPanel();
 		});
@@ -385,10 +385,10 @@ public class GimLogoutReminderPlugin extends Plugin
 			{
 				continue; // empty slot or bank placeholder
 			}
-			int canonical = itemManager.canonicalize(item.getId());
-			if (listedItems.contains(canonical))
+			int listed = findListed(item.getId());
+			if (listed != -1)
 			{
-				totals.merge(canonical, (long) item.getQuantity(), Long::sum);
+				totals.merge(listed, (long) item.getQuantity(), Long::sum);
 			}
 		}
 	}
@@ -402,6 +402,7 @@ public class GimLogoutReminderPlugin extends Plugin
 		}
 
 		saveBankSnapshot(event.getItemContainer());
+		syncBankTag(event.getItemContainer());
 	}
 
 	/**
@@ -483,14 +484,16 @@ public class GimLogoutReminderPlugin extends Plugin
 			return;
 		}
 
-		int canonical = itemManager.canonicalize(itemId);
-		boolean listed = listedItems.contains(canonical);
+		// A charged item counts as the same item as its uncharged version on the list
+		int existing = findListed(itemId);
+		boolean listed = existing != -1;
+		int target = listed ? existing : itemManager.canonicalize(itemId);
 
 		client.createMenuEntry(-1)
 				.setOption(listed ? REMOVE_OPTION : ADD_OPTION)
 				.setTarget(event.getTarget())
 				.setType(MenuAction.RUNELITE)
-				.onClick(e -> toggleItem(canonical));
+				.onClick(e -> toggleItem(target));
 	}
 
 	/** Maximum number of search results shown in the panel. */
@@ -502,6 +505,7 @@ public class GimLogoutReminderPlugin extends Plugin
 		clientThread.invokeLater(() ->
 		{
 			String lower = query.toLowerCase();
+			Set<Integer> seenBases = new HashSet<>();
 			List<GimListPanel.Entry> results = itemManager.search(query).stream()
 					// Names starting with the query first, then alphabetical
 					.sorted((a, b) ->
@@ -514,8 +518,10 @@ public class GimLogoutReminderPlugin extends Plugin
 						}
 						return a.getName().compareToIgnoreCase(b.getName());
 					})
+					// Show each item only once, not every charged/imbued/ornament version
+					.filter(item -> seenBases.add(ItemVariationMapping.map(item.getId())))
 					.limit(MAX_SEARCH_RESULTS)
-					.map(item -> new GimListPanel.Entry(item.getId(), item.getName(), listedItems.contains(item.getId())))
+					.map(item -> new GimListPanel.Entry(item.getId(), item.getName(), findListed(item.getId()) != -1))
 					.collect(Collectors.toList());
 			SwingUtilities.invokeLater(() -> panel.showResults(results, query));
 		});
@@ -527,7 +533,7 @@ public class GimLogoutReminderPlugin extends Plugin
 		clientThread.invokeLater(() ->
 		{
 			int canonical = itemManager.canonicalize(itemId);
-			if (!listedItems.contains(canonical))
+			if (findListed(canonical) == -1)
 			{
 				toggleItem(canonical);
 			}
@@ -546,30 +552,109 @@ public class GimLogoutReminderPlugin extends Plugin
 		});
 	}
 
+	/**
+	 * Client thread only. Returns the listed item id that the given item counts as, or -1.
+	 * Variations of an item (charged/uncharged, degraded, potion doses, ...) count as the
+	 * same item, so a charged Tumeken's shadow matches an uncharged one on the list.
+	 */
+	private int findListed(int itemId)
+	{
+		int canonical = itemManager.canonicalize(itemId);
+		if (listedItems.contains(canonical))
+		{
+			return canonical;
+		}
+		int base = ItemVariationMapping.map(canonical);
+		for (int listed : listedItems)
+		{
+			if (ItemVariationMapping.map(listed) == base)
+			{
+				return listed;
+			}
+		}
+		return -1;
+	}
+
 	/** Client thread only. */
 	private void toggleItem(int itemId)
 	{
-		if (listedItems.remove(itemId))
-		{
-			tagManager.removeTag(itemId, BANK_TAG);
-		}
-		else
+		if (!listedItems.remove(itemId))
 		{
 			listedItems.add(itemId);
-			tagManager.addTag(itemId, BANK_TAG, false);
 		}
 		saveItems();
 		refreshPanel();
 
-		// The list changed, so update the saved bank amounts too (the bank is open when items are added)
+		// The list changed, so update the saved bank amounts and the bank tag too
 		ItemContainer bankContainer = client.getItemContainer(InventoryID.BANK);
 		if (bankContainer != null)
 		{
 			saveBankSnapshot(bankContainer);
 		}
+		syncBankTag(bankContainer);
 
 		// Refresh the filtered bank view so the change shows immediately
 		if (panelOpen && isBankOpen())
+		{
+			openBankFilter();
+		}
+	}
+
+	/**
+	 * Client thread only. Makes the "gim" bank tag hold exactly the versions of listed items that
+	 * are really in the bank (not placeholders). If you only have Berserker ring (i), the filter
+	 * shows only that; if you have both it and the normal ring, it shows both. A listed item with
+	 * no version in the bank keeps its own tag. bank may be null when the bank is unknown.
+	 */
+	private void syncBankTag(ItemContainer bank)
+	{
+		Set<Integer> desired = new HashSet<>();
+		Set<Integer> foundListed = new HashSet<>();
+		if (bank != null)
+		{
+			for (Item item : bank.getItems())
+			{
+				if (item.getId() <= 0 || item.getQuantity() <= 0 || isPlaceholder(item.getId()))
+				{
+					continue;
+				}
+				int listed = findListed(item.getId());
+				if (listed != -1)
+				{
+					desired.add(item.getId());
+					foundListed.add(listed);
+				}
+			}
+		}
+		for (int id : listedItems)
+		{
+			if (!foundListed.contains(id))
+			{
+				desired.add(id);
+			}
+		}
+
+		boolean changed = false;
+		// Remove tags that should not be there, including "all versions" tags from older versions
+		for (int id : tagManager.getItemsForTag(BANK_TAG))
+		{
+			if (id < 0 || !desired.contains(id))
+			{
+				tagManager.removeTag(Math.abs(id), BANK_TAG);
+				changed = true;
+			}
+		}
+		Set<Integer> current = new HashSet<>(tagManager.getItemsForTag(BANK_TAG));
+		for (int id : desired)
+		{
+			if (!current.contains(id))
+			{
+				tagManager.addTag(id, BANK_TAG, false);
+				changed = true;
+			}
+		}
+
+		if (changed && panelOpen && isBankOpen())
 		{
 			openBankFilter();
 		}
@@ -592,6 +677,24 @@ public class GimLogoutReminderPlugin extends Plugin
 			catch (NumberFormatException ignored)
 			{
 			}
+		}
+
+		// Older versions could list several versions of the same item (e.g. Ring of suffering,
+		// (r) and (ri)). Keep only the first one of each, since they now count as one item.
+		Set<Integer> seenBases = new HashSet<>();
+		boolean removedDuplicates = false;
+		for (Iterator<Integer> it = listedItems.iterator(); it.hasNext(); )
+		{
+			int id = it.next();
+			if (!seenBases.add(ItemVariationMapping.map(id)))
+			{
+				it.remove();
+				removedDuplicates = true;
+			}
+		}
+		if (removedDuplicates)
+		{
+			saveItems();
 		}
 	}
 
